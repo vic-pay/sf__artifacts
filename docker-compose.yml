@@ -1,0 +1,72 @@
+version: '2.4'
+
+services:
+  artifactory-01:
+    image:          docker.bintray.io/jfrog/artifactory-pro:latest
+    container_name: artifactory-01
+    hostname:       artifactory-01
+    networks:     
+      artifactory-network:
+        ipv4_address: 172.20.0.2
+    ports:        ["8081:8081", "8082:8082"]
+    volumes:
+      - type:       volume
+        source:     artifactory-01-data
+        target:     /var/opt/jfrog/artifactory
+
+  nginx-01:
+    image:          nginx:latest
+    container_name: nginx-01
+    hostname:       nginx-01
+    networks:     
+      artifactory-network:
+        ipv4_address: 172.20.0.3
+    ports:        ["80:80", "443:443"]
+    volumes:
+      - type:     bind
+        source: ./nginx/nginx.conf
+        target:  /etc/nginx/conf.d/cert-auth.conf
+      - type:     bind
+        source: ./openssl/crt/nginx-01.crt
+        target:  /etc/nginx/ssl/ssl.crt
+      - type:     bind
+        source: ./openssl/key/nginx-01.key
+        target:  /etc/nginx/ssl/ssl.key
+    depends_on: ["artifactory-01"]
+
+  client-01:
+    image:          python:alpine
+    container_name: client-01
+    hostname:       client-01
+    command:       "tail -f /dev/null"
+    volumes:
+      - type: bind
+        source: ./openssl/crt/ca.crt
+        target:  /etc/ssl/certs/ca-private.crt
+      - type: bind
+        source: ./client/pip.conf
+        target:  /etc/pip.conf
+      - type: bind
+        source: ./client/.pypirc
+        target:  /root/.pypirc
+      - type: bind
+        source: ./client/foo
+        target:  /root/foo
+    networks:     
+      artifactory-network:
+        ipv4_address: 172.20.0.4
+    depends_on: ["artifactory-01", "nginx-01"]    
+
+volumes:
+  artifactory-01-data:
+    name:   artifactory-01-data
+    driver: local
+
+networks:
+  artifactory-network:
+    name:   artifactory-network
+    driver: bridge
+    ipam:
+      config:
+        - subnet:  172.20.0.0/16
+          gateway: 172.20.0.1
